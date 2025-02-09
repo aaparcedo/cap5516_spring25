@@ -8,7 +8,8 @@
 #SBATCH --job-name=cap5516      # Job name of SLURM job
 #SBATCH --constraint=v100      # Type of GPU (ARCC only)
 
-export log_file="/home/cap5516.student2/cap5516_spring25/logs/${SLURM_JOB_ID}.log"
+# TODO: fill with you logs folder path
+export log_file="path/to/cap5516_spring25/logs/${SLURM_JOB_ID}.log"
 
 exec &> $log_file
 
@@ -16,8 +17,10 @@ echo "Starting time: $(date)"
 
 rm "./slurm-${SLURM_JOB_ID}.out"
 
-export PATH="/home/cap5516.student2/.conda/envs/cap5516/bin:$PATH"
+# TODO: fill with your conda environment bin path
+export PATH="/path/to/.conda/envs/cap5516/bin:$PATH"
 
-/home/cap5516.student2/.conda/envs/cap5516/bin/python  main.py
+# TODO: fill with your conda environment python path
+/path/to/.conda/envs/cap5516/bin/python  main.py
 
 echo "Ending time: $(date)"
