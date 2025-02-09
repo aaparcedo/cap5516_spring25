@@ -37,7 +37,7 @@ python balance_dataset.py
 
 ## Experiments
 
-If running on HPC with Slurm:
+If running on HPC with Slurm (update the paths in slurm.sh):
 ```bash
 sbatch slurm.sh
 ```
