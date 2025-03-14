@@ -21,7 +21,8 @@ pip install -r requirements.txt
 
 4. Create logs folder
 ```bash
-mkdir logs
+mkdir classification_pneumonia_xray/logs
+mkdir segmentation_tumor_mri/logs
 ```
 
 ### Dataset Assignment 1 (classification_pneumonia_xray)
