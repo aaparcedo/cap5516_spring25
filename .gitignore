@@ -1,3 +1,8 @@
 *.jpg
 *.jpeg
-./balanced_pneumonia
+*/balanced_pneumonia*
+*logs*
+*results*
+*Task01_BrainTumour*
+*.pth*
+*tfevents*

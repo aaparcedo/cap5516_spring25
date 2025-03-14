@@ -24,7 +24,7 @@ pip install -r requirements.txt
 mkdir logs
 ```
 
-## Dataset
+## Dataset Assignment 1 (classification_pneumonia_xray)
 Paths are set to default. Check paths are correct if an error occur.
 1. Download dataset Chest X-Ray Images (Pneumonia) [https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia]
 ```bash
@@ -35,14 +35,30 @@ python download.py
 python balance_dataset.py
 ```
 
-## Experiments
+## Dataset Assignment 2 (segmentation_tumor_mri)
+```bash
+cd segmentation_tumor_mri
+gdown --id 1A2IU8Sgea1h3fYLpYtFb2v7NYdMjvEhU
+tar -xvf Task01_BrainTumour.tar
+```
+
+## Experiments 
+Run from the root directory.
 
 If running on HPC with Slurm:
 ```bash
-sbatch slurm.sh
+sbatch classification_pneumonia_xray/slurm.sh
+```
+OR
+```bash
+sbatch segmentation_tumor_mri/slurm.sh
 ```
 
 Otherwise (test results will print to stdout):
 ```bash
-python main.py
+python classification_pneumonia_xray/main.py
+```
+OR
+```bash
+python segmentation_tumor_mri/main.py
 ```
