@@ -11,7 +11,7 @@ cd cap5516_spring25
 2. Create and activate a virtual environment:
 ```bash
 conda create -n cap5516 python=3.10 -y
-conda acitvate cap5516
+conda activate cap5516
 ```
 
 3. Install dependencies:
@@ -24,7 +24,7 @@ pip install -r requirements.txt
 mkdir logs
 ```
 
-## Dataset Assignment 1 (classification_pneumonia_xray)
+### Dataset Assignment 1 (classification_pneumonia_xray)
 Paths are set to default. Check paths are correct if an error occur.
 1. Download dataset Chest X-Ray Images (Pneumonia) [https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia]
 ```bash
@@ -35,7 +35,7 @@ python download.py
 python balance_dataset.py
 ```
 
-## Dataset Assignment 2 (segmentation_tumor_mri)
+### Dataset Assignment 2 (segmentation_tumor_mri)
 ```bash
 cd segmentation_tumor_mri
 gdown --id 1A2IU8Sgea1h3fYLpYtFb2v7NYdMjvEhU
