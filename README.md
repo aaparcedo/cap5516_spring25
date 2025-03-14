@@ -45,7 +45,7 @@ tar -xvf Task01_BrainTumour.tar
 ## Experiments 
 Run from the root directory.
 
-If running on HPC with Slurm:
+If running on HPC with Slurm (update the paths in slurm.sh):
 ```bash
 sbatch classification_pneumonia_xray/slurm.sh
 ```
