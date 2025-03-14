@@ -6,6 +6,6 @@ kagglehub==0.3.7
 torchvision==0.21.0
 scikit-learn==1.6.1
 pandas==2.2.3
-gdown=5.2.0
-nibabel=5.3.2
-monai=1.4.0
+gdown==5.2.0
+nibabel==5.3.2
+monai==1.4.0
