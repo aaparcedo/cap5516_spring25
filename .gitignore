@@ -6,3 +6,7 @@
 *Task01_BrainTumour*
 *.pth*
 *tfevents*
+*.png*
+*.roi*
+*.tif*
+*.mat*
