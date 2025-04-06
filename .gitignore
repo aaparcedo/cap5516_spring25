@@ -10,3 +10,6 @@
 *.roi*
 *.tif*
 *.mat*
+*.db*
+*muscle*
+segmentation_efficientsam_histological/EfficientSAM/
