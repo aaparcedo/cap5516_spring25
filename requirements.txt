@@ -14,3 +14,4 @@ timm==1.0.15
 einops==0.8.1
 tifffile==2025.3.30
 torchmetrics==1.7.0
+scikit-image==0.25.2

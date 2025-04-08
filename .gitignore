@@ -13,3 +13,4 @@
 *.db*
 *muscle*
 segmentation_efficientsam_histological/EfficientSAM/
+segmentation_efficientsam_histological/__pycache__/
