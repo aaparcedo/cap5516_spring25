@@ -390,7 +390,7 @@ def plot_metrics(results, save_dir):
     plt.savefig(os.path.join(save_dir, 'loss_curves.png'))
     plt.close()
     
-def Config():
+class Config():
     def __init__(self):
         self.seed = 42
         self.root_dir = "/home/cap5516.student2/cap5516_spring25/segmentation_efficientsam_histological/NuInsSeg"
@@ -439,7 +439,6 @@ def main():
     logger.info(f"Dataset loaded with {len(dataset)} samples")
     logger.info(f'Checkpoint directory: {checkpoint_dir}')
 
-    # Define worker initialization function for consistent randomness
     def worker_init_fn(worker_id):
         np.random.seed(cfg.seed + worker_id)
         random.seed(cfg.seed + worker_id)
@@ -573,7 +572,6 @@ def main():
                 results['folds'][str(fold)]['best_panoptic_quality'] = panoptic_quality
                 logger.info(f"  New best model saved with validation loss: {val_loss:.4f}")
                 
-                # Visualize results if enabled
                 if cfg.visualize_results:
                     fold_vis_dir = os.path.join(vis_dir, f"fold_{fold}_epoch_{epoch+1}")
                     os.makedirs(fold_vis_dir, exist_ok=True)
@@ -588,7 +586,6 @@ def main():
                         fold_idx=fold
                     )
             
-            # Check if early stopping should be triggered
             if early_stopping.early_stop:
                 logger.info("  Early stopping triggered")
                 break
@@ -616,10 +613,7 @@ def main():
                 fold_idx=fold
             )
             
-            # Clean up
             del best_model
-            
-        # Clean up to free memory for next fold
         del sam_model, lora_sam, optimizer, criterion, early_stopping
         torch.cuda.empty_cache()
     

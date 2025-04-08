@@ -40,12 +40,11 @@ class _LoRA_qkv(nn.Module):
         new_q = self.linear_b_q(self.linear_a_q(x))
         new_v = self.linear_b_v(self.linear_a_v(x))
         
-        # Add LoRA contributions to q and v parts of qkv
+        # Add LoRA contributions QV of QKV
         qkv_split = qkv.reshape(B, N, 3, C)
         qkv_split[:, :, 0, :] += (self.alpha / self.r) * new_q
         qkv_split[:, :, 2, :] += (self.alpha / self.r) * new_v
         
-        # Return the reshaped tensor in the original format
         return qkv_split.reshape(B, N, three_C)
     
 class LoRA_EfficientSAM(nn.Module):

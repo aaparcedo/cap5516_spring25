@@ -23,10 +23,7 @@ class NuInsSegDataset(Dataset):
         self.num_points = num_points
         self.apply_augmentation = apply_augmentation
         
-        # Get all available tissue types if none specified
-        if tissue_types is None:
-            tissue_types = [d for d in os.listdir(root_dir) 
-                           if os.path.isdir(os.path.join(root_dir, d))]
+        tissue_types = [d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
         
         # Collect all original samples
         self.original_samples = []
@@ -58,7 +55,6 @@ class NuInsSegDataset(Dataset):
                 if os.path.exists(label_mask_path):
                     self.original_samples.append((img_path, label_mask_path))
         
-        # Build the expanded dataset
         self.samples = []
         
         # Add all original samples
@@ -98,7 +94,7 @@ class NuInsSegDataset(Dataset):
         panoptic_mask_tensor = torch.from_numpy(panoptic_mask)
         
         # Generate prompt points from nuclei masks
-        instance_ids = np.unique(instance_mask)[1:]  # Skip background (0)
+        instance_ids = np.unique(instance_mask)[1:] 
         
         # Prepare arrays for prompt points and labels
         prompt_points = []
@@ -197,7 +193,6 @@ class NuInsSegDataset(Dataset):
         # Only transform valid prompt points (those with label == 1)
         valid_points_mask = (prompt_labels == 1)
         
-        # Get image dimensions
         H, W = image.shape[:2]
         
         if augmentation_type == 'rotation':
@@ -303,15 +298,12 @@ class NuInsSegDataset(Dataset):
             normalized_lab = cv2.merge((cl, a, b))
             image = cv2.cvtColor(normalized_lab, cv2.COLOR_LAB2RGB)
         
-        # Clip points to image boundaries (for safety)
         prompt_points = np.clip(prompt_points, 0, [W-1, H-1])
         
-        # Normalize image back to model's expected format
         image = image.astype(np.float32) / 255.0
         image = (image - mean) / std
         image = torch.from_numpy(image).permute(2, 0, 1)  # Back to CHW
         
-        # Update sample with augmented data
         sample['image'] = image
         sample['binary_mask'] = torch.from_numpy(binary_mask).float()
         sample['instance_mask'] = torch.from_numpy(instance_mask).float()
@@ -481,7 +473,6 @@ def augment_batch(batch, augmentation_type=None, augmentation_prob=0.5, device='
         Augmented batch
     """
     
-    # Skip augmentation with probability (1-augmentation_prob)
     if random.random() > augmentation_prob:
         return batch
     
@@ -504,7 +495,6 @@ def augment_batch(batch, augmentation_type=None, augmentation_prob=0.5, device='
     if augmentation_type == 'color':
         jitter_type = random.choice(['brightness', 'contrast', 'saturation'])
         
-        # Convert to CPU for processing
         images_cpu = images.cpu().numpy()
         
         # Apply jittering to each image in the batch
