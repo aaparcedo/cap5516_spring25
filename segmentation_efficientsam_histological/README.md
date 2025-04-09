@@ -25,9 +25,9 @@ NuInsSeg dataset from the paper NuInsSeg: A Fully Annotated Dataset for Nuclei I
 
 
 ```
-wget https://zenodo.org/records/10518968/files/NuInsSeg.zip
 mkdir NuInsSeg
 cd NuInsSeg
+wget https://zenodo.org/records/10518968/files/NuInsSeg.zip
 unzip NuInsSeg
 rm NuInsSeg.zip
 ```
