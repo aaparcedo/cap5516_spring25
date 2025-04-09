@@ -10,6 +10,8 @@ from torch.utils.data import Dataset
 import cv2
 from torchvision import transforms
 
+
+
 class NuInsSegDataset(Dataset):
     def __init__(self, root_dir, tissue_types=None, num_points=370, apply_augmentation=True):
         """
@@ -56,17 +58,17 @@ class NuInsSegDataset(Dataset):
                     self.original_samples.append((img_path, label_mask_path))
         
         self.samples = []
+        # Define all available augmentation types
+        self.aug_types = ['rotation', 'flip', 'color']
         
         # Add all original samples
         for sample in self.original_samples:
             self.samples.append((sample[0], sample[1], False, None))  # Original sample
             
-            # Add augmented versions if enabled
+            # Add augmented versions if enabled - one for each augmentation type
             if apply_augmentation:
-                # Choose a random augmentation type for each sample
-                aug_types = ['rotation', 'flip', 'color']
-                aug_type = random.choice(aug_types)
-                self.samples.append((sample[0], sample[1], True, aug_type))
+                for aug_type in self.aug_types:
+                    self.samples.append((sample[0], sample[1], True, aug_type))
     
     def __len__(self):
         return len(self.samples)
@@ -85,7 +87,7 @@ class NuInsSegDataset(Dataset):
         panoptic_mask[0] = instance_mask  # Instance IDs
         panoptic_mask[1] = binary_mask
 
-        normalized_image = self.normalize_he_stain(image)
+        normalized_image = normalize_he_stain(image)
         image_tensor = torch.from_numpy(normalized_image).permute(2, 0, 1).float() / 255.0
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], 
@@ -149,15 +151,6 @@ class NuInsSegDataset(Dataset):
             sample = self.apply_single_augmentation(sample, augmentation_type=aug_type)
             
         return sample
-                
-    def normalize_he_stain(self, img):
-        lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
-        l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        cl = clahe.apply(l)
-        normalized_lab = cv2.merge((cl, a, b))
-        normalized_rgb = cv2.cvtColor(normalized_lab, cv2.COLOR_LAB2RGB)
-        return normalized_rgb
     
     def apply_single_augmentation(self, sample, augmentation_type=None):
         """
@@ -315,6 +308,17 @@ class NuInsSegDataset(Dataset):
         
         return sample
 
+
+
+def normalize_he_stain(img):
+    lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    normalized_lab = cv2.merge((cl, a, b))
+    normalized_rgb = cv2.cvtColor(normalized_lab, cv2.COLOR_LAB2RGB)
+    return normalized_rgb
+
                 
 class AugmentedNuInsSegDataset(NuInsSegDataset):
     def __init__(self, root_dir, tissue_types=None, num_points=370, include_augmentations=True):
@@ -363,18 +367,16 @@ class AugmentedNuInsSegDataset(NuInsSegDataset):
                 if os.path.exists(label_mask_path):
                     self.original_samples.append((img_path, label_mask_path))
         
-        # Create the expanded sample list
         self.samples = []
-        # Add all original samples
+        self.aug_types = ['rotation', 'flip', 'color']
+
         for sample in self.original_samples:
-            self.samples.append((sample[0], sample[1], False, None))  # Original sample
+            self.samples.append((sample[0], sample[1], False, None))
             
-            # Add augmented versions if enabled
             if include_augmentations:
-                # Add one augmented version of each sample with a random augmentation type
-                aug_types = ['rotation', 'flip', 'color']
-                aug_type = random.choice(aug_types)
-                self.samples.append((sample[0], sample[1], True, aug_type))
+                for aug_type in self.aug_types:
+                    self.samples.append((sample[0], sample[1], True, aug_type))
+
     
     def __len__(self):
         return len(self.samples)
@@ -393,7 +395,7 @@ class AugmentedNuInsSegDataset(NuInsSegDataset):
         panoptic_mask[0] = instance_mask  # Instance IDs
         panoptic_mask[1] = binary_mask
 
-        normalized_image = self.normalize_he_stain(image)
+        normalized_image = normalize_he_stain(image)
         image_tensor = torch.from_numpy(normalized_image).permute(2, 0, 1).float() / 255.0
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], 
@@ -457,94 +459,3 @@ class AugmentedNuInsSegDataset(NuInsSegDataset):
             sample = self.apply_single_augmentation(sample, augmentation_type=aug_type)
         
         return sample
-
-
-def augment_batch(batch, augmentation_type=None, augmentation_prob=0.5, device='cuda'):
-    """
-    Apply a single augmentation to a batch of samples with correctly transformed prompt points.
-    
-    Args:
-        batch: Dictionary with batched tensors
-        augmentation_type: One of 'rotation', 'flip', 'color', or None for random selection
-        augmentation_prob: Probability of applying augmentation to the batch
-        device: Device where the batch tensors are located
-        
-    Returns:
-        Augmented batch
-    """
-    
-    if random.random() > augmentation_prob:
-        return batch
-    
-    if augmentation_type is None:
-        augmentation_types = ['rotate', 'flip', 'color']
-        augmentation_type = random.choice(augmentation_types)
-    
-    # Extract tensors from batch
-    images = batch['image']
-    binary_masks = batch['binary_mask']
-    instance_masks = batch['instance_mask']
-    prompt_points = batch['prompt_points'].clone()  # Clone to avoid modifying original
-    prompt_labels = batch['prompt_labels']
-    
-    batch_size = images.shape[0]
-    
-    _, C, H, W = images.shape
-    
- 
-    if augmentation_type == 'color':
-        jitter_type = random.choice(['brightness', 'contrast', 'saturation'])
-        
-        images_cpu = images.cpu().numpy()
-        
-        # Apply jittering to each image in the batch
-        for b in range(batch_size):
-            img = np.transpose(images_cpu[b], (1, 2, 0))  # CHW -> HWC
-            
-            # Denormalize for color operations
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
-            img = img * std + mean
-            
-            if jitter_type == 'brightness':
-                # Brightness adjustment
-                brightness_factor = random.uniform(0.7, 1.3)
-                img = np.clip(img * brightness_factor, 0, 1)
-            
-            elif jitter_type == 'contrast':
-                # Contrast adjustment
-                contrast_factor = random.uniform(0.7, 1.3)
-                mean_val = np.mean(img, axis=(0, 1), keepdims=True)
-                img = np.clip((img - mean_val) * contrast_factor + mean_val, 0, 1)
-            
-            elif jitter_type == 'saturation':
-                # Saturation adjustment - convert to HSV, adjust S, convert back
-                img_hsv = cv2.cvtColor((img * 255).astype(np.uint8), cv2.COLOR_RGB2HSV)
-                saturation_factor = random.uniform(0.7, 1.3)
-                img_hsv[:, :, 1] = np.clip(img_hsv[:, :, 1] * saturation_factor, 0, 255)
-                img = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2RGB).astype(np.float32) / 255.0
-            
-            # Renormalize
-            img = (img - mean) / std
-            images_cpu[b] = np.transpose(img, (2, 0, 1))  # HWC -> CHW
-        
-        # Convert back to tensor and move to device
-        images = torch.from_numpy(images_cpu).to(device)
-    
-    for b in range(batch_size):
-        valid_indices = (prompt_labels[b] == 1)
-        if valid_indices.sum() > 0:
-            prompt_points[b, valid_indices, 0] = torch.clamp(prompt_points[b, valid_indices, 0], 0, W-1)
-            prompt_points[b, valid_indices, 1] = torch.clamp(prompt_points[b, valid_indices, 1], 0, H-1)
-    
-    batch['image'] = images
-    batch['binary_mask'] = binary_masks
-    batch['instance_mask'] = instance_masks
-    batch['prompt_points'] = prompt_points
-    
-    batch['panoptic_mask'] = torch.stack([
-        instance_masks,
-        binary_masks
-    ], dim=1)
-    
-    return batch

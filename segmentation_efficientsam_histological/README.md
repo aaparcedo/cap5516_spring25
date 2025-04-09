@@ -21,6 +21,9 @@ pip install -r requirements.txt
 ```
 
 ## Dataset
+NuInsSeg dataset from the paper NuInsSeg: A Fully Annotated Dataset for Nuclei Instance Segmentation in H&E-Stained Histological Images [https://arxiv.org/pdf/2308.01760].
+
+
 ```
 wget https://zenodo.org/records/10518968/files/NuInsSeg.zip
 mkdir NuInsSeg

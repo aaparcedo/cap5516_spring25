@@ -4,9 +4,9 @@
 #SBATCH --ntasks-per-node=4    # Match with --ntasks
 #SBATCH --cpus-per-task=4      # CPUs per worker
 #SBATCH --gres=gpu:1           # Number of GPUs
-#SBATCH --time=12:00:00        # Total time to request
+#SBATCH --time=36:00:00        # Total time to request
 #SBATCH --job-name=cap5516     # Job name of SLURM job
-#SBATCH --constraint=h100      # Type of GPU (ARCC only)
+#SBATCH --constraint=v100      # Type of GPU (ARCC only)
 
 # TODO: fill with you logs folder path
 export log_file="/home/cap5516.student2/cap5516_spring25/segmentation_efficientsam_histological/logs/${SLURM_JOB_ID}.log"

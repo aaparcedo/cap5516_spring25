@@ -1,10 +1,8 @@
-import random
 import os
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from skimage.measure import label
@@ -13,122 +11,7 @@ from monai.metrics import DiceMetric
 from monai.metrics import MeanIoU
 
 
-
-
-def visualize_augmentations(dataset, output_dir, num_samples=5):
-    """
-    Visualize the effect of different augmentations on random samples.
-    
-    Args:
-        dataset: The dataset to sample from
-        output_dir: Directory to save visualizations
-        num_samples: Number of samples to visualize
-    """    
-    os.makedirs(output_dir, exist_ok=True)
-    dataset_size = len(dataset)
-    sample_indices = random.sample(range(dataset_size), min(num_samples, dataset_size))
-    
-    augmentation_types = ['color']
-    
-    for idx, sample_idx in enumerate(sample_indices):
-        sample = dataset[sample_idx]
-        
-        # Get original image and mask
-        orig_image = sample['image'].numpy().transpose(1, 2, 0)
-        
-        # Denormalize image for visualization
-        mean = np.array([0.485, 0.456, 0.406])
-        std = np.array([0.229, 0.224, 0.225])
-        orig_image = (orig_image * std + mean)
-        orig_image = np.clip(orig_image, 0, 1)
-        
-        orig_binary_mask = sample['binary_mask'].numpy()
-        orig_instance_mask = sample['instance_mask'].numpy()
-        orig_points = sample['prompt_points'].numpy()
-        orig_labels = sample['prompt_labels'].numpy()
-        
-        # Create a figure with rows for each augmentation type
-        fig, axs = plt.subplots(1 + len(augmentation_types), 3, figsize=(15, 5 * (1 + len(augmentation_types))))
-        
-        # Plot original image, mask, and points
-        axs[0, 0].imshow(orig_image)
-        axs[0, 0].set_title('Original Image')
-        axs[0, 0].axis('off')
-        
-        # Plot original binary mask
-        axs[0, 1].imshow(orig_image)
-        axs[0, 1].imshow(orig_binary_mask, alpha=0.5, cmap='Reds')
-        axs[0, 1].set_title('Original Binary Mask')
-        axs[0, 1].axis('off')
-        
-        # Plot original instance mask with different colors
-        axs[0, 2].imshow(orig_image)
-        # Create custom colormap for instances
-        cmap = plt.cm.get_cmap('tab20', np.max(orig_instance_mask) + 1)
-        instance_colored = cmap(orig_instance_mask)
-        instance_colored[orig_instance_mask == 0] = [0, 0, 0, 0]  # Make background transparent
-        axs[0, 2].imshow(instance_colored, alpha=0.7)
-        axs[0, 2].set_title('Original Instance Mask')
-        axs[0, 2].axis('off')
-        
-        # Plot prompt points on top of all original images
-        valid_points = orig_points[orig_labels == 1]
-        for pt in valid_points:
-            for ax in axs[0]:
-                ax.plot(pt[0], pt[1], 'yo', markersize=5)
-        
-        # Apply and visualize each augmentation type
-        for aug_idx, aug_type in enumerate(augmentation_types):
-            # Create a deep copy of the sample for augmentation
-            aug_sample = {k: v.clone() if isinstance(v, torch.Tensor) else v 
-                         for k, v in sample.items()}
-            
-            # Apply augmentation
-            aug_sample = dataset.apply_single_augmentation(aug_sample, augmentation_type=aug_type)
-            
-            # Get augmented image and mask
-            aug_image = aug_sample['image'].numpy().transpose(1, 2, 0)
-            aug_image = (aug_image * std + mean)
-            aug_image = np.clip(aug_image, 0, 1)
-            
-            aug_binary_mask = aug_sample['binary_mask'].numpy()
-            aug_instance_mask = aug_sample['instance_mask'].numpy()
-            aug_points = aug_sample['prompt_points'].numpy()
-            aug_labels = aug_sample['prompt_labels'].numpy()
-            
-            # Plot augmented image
-            axs[aug_idx+1, 0].imshow(aug_image)
-            axs[aug_idx+1, 0].set_title(f'{aug_type.capitalize()} - Image')
-            axs[aug_idx+1, 0].axis('off')
-            
-            # Plot augmented binary mask
-            axs[aug_idx+1, 1].imshow(aug_image)
-            axs[aug_idx+1, 1].imshow(aug_binary_mask, alpha=0.5, cmap='Reds')
-            axs[aug_idx+1, 1].set_title(f'{aug_type.capitalize()} - Binary Mask')
-            axs[aug_idx+1, 1].axis('off')
-            
-            # Plot augmented instance mask
-            axs[aug_idx+1, 2].imshow(aug_image)
-            # Color the instances
-            aug_instance_colored = cmap(aug_instance_mask)
-            aug_instance_colored[aug_instance_mask == 0] = [0, 0, 0, 0]  # Make background transparent
-            axs[aug_idx+1, 2].imshow(aug_instance_colored, alpha=0.7)
-            axs[aug_idx+1, 2].set_title(f'{aug_type.capitalize()} - Instance Mask')
-            axs[aug_idx+1, 2].axis('off')
-            
-            valid_aug_points = aug_points[aug_labels == 1]
-            for pt in valid_aug_points:
-                for ax in axs[aug_idx+1]:
-                    ax.plot(pt[0], pt[1], 'yo', markersize=5)
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'augmentation_sample_{sample_idx}.png'), dpi=150)
-        plt.close(fig)
-        
-    print(f"Augmentation visualizations saved to {output_dir}")
-
-
-def visualize_predictions(model, dataset, device, output_dir, num_samples=5, fold_idx=0):
+def visualize_predictions(model, dataset, device, output_dir, num_samples=5):
     """
     Visualize model predictions vs ground truth masks.
     
@@ -146,10 +29,9 @@ def visualize_predictions(model, dataset, device, output_dir, num_samples=5, fol
     original_indices = []
     for i, sample_data in enumerate(dataset.samples):
         img_path, mask_path, is_augmented, _ = sample_data
-        if not is_augmented:  # Only select non-augmented samples
+        if not is_augmented:  
             original_indices.append(i)
     
-    # Select from original samples only
     indices = np.random.choice(
         original_indices, 
         min(num_samples, len(original_indices)), 
@@ -168,6 +50,8 @@ def visualize_predictions(model, dataset, device, output_dir, num_samples=5, fol
             
             image_path = batch['image_path'][0]
             sample_name = os.path.basename(image_path).split('.')[0]
+            
+            # import code; code.interact(local=locals())
             
             predicted_masks, iou_predictions = model(images, prompt_points, prompt_labels)
             

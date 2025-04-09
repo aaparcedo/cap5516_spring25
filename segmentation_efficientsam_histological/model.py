@@ -57,11 +57,12 @@ class LoRA_EfficientSAM(nn.Module):
         lora_layer_indices: which layers to apply LoRA (default: all)
     """
     
-    def __init__(self, sam_model, r=4, alpha=4, lora_layer_indices=None):
+    def __init__(self, config, sam_model, r=4, alpha=4, lora_layer_indices=None):
         super(LoRA_EfficientSAM, self).__init__()
         
         self.sam = sam_model
         self.image_encoder = self.sam.image_encoder
+        self.device = config.device
         
         self.w_As = nn.ModuleList()
         self.w_Bs = nn.ModuleList()
@@ -72,19 +73,25 @@ class LoRA_EfficientSAM(nn.Module):
         if lora_layer_indices is None:
             lora_layer_indices = list(range(len(self.image_encoder.blocks)))
             
+        # Store the original qkv layers before modifying them
+        original_qkv_layers = {}
+        for block_idx in lora_layer_indices:
+            block = self.image_encoder.blocks[block_idx]
+            original_qkv_layers[block_idx] = block.attn.qkv
+                
         for block_idx, block in enumerate(self.image_encoder.blocks):
             if block_idx not in lora_layer_indices:
                 continue
                 
-            # Get the qkv projection layer
-            w_qkv_linear = block.attn.qkv
+            # Get the original qkv projection layer
+            w_qkv_linear = original_qkv_layers[block_idx]
             dim = w_qkv_linear.in_features
             
             # Create LoRA projections for q and v
-            w_a_linear_q = nn.Linear(dim, r, bias=False)
-            w_b_linear_q = nn.Linear(r, dim, bias=False)
-            w_a_linear_v = nn.Linear(dim, r, bias=False)
-            w_b_linear_v = nn.Linear(r, dim, bias=False)
+            w_a_linear_q = nn.Linear(dim, r, bias=False).to(self.device)
+            w_b_linear_q = nn.Linear(r, dim, bias=False).to(self.device)
+            w_a_linear_v = nn.Linear(dim, r, bias=False).to(self.device)
+            w_b_linear_v = nn.Linear(r, dim, bias=False).to(self.device)
             
             # Make sure these new LoRA layers are trainable
             w_a_linear_q.requires_grad_(True)
@@ -155,13 +162,13 @@ class LoRA_EfficientSAM(nn.Module):
     
     def load_lora_parameters(self, filename):
         """Load only the LoRA parameters from a file"""
-        lora_state_dict = torch.load(filename, map_location="cpu")
+        device = next(self.parameters()).device  # Get current device
+        lora_state_dict = torch.load(filename, map_location=device)
         
         for i, w_A in enumerate(self.w_As):
             if f"w_a_{i}" in lora_state_dict:
-                w_A.weight.data = lora_state_dict[f"w_a_{i}"]
+                w_A.weight.data = lora_state_dict[f"w_a_{i}"].to(device)
         
         for i, w_B in enumerate(self.w_Bs):
             if f"w_b_{i}" in lora_state_dict:
-                w_B.weight.data = lora_state_dict[f"w_b_{i}"]
-                
+                w_B.weight.data = lora_state_dict[f"w_b_{i}"].to(device)

@@ -14,19 +14,15 @@ import matplotlib.pyplot as plt
 import json
 from datetime import datetime
 logger.info("random os matplotlib json datetime") 
-
-import math
-logger.info("math") 
+ 
 import numpy as np
-from PIL import Image
 logger.info("PIL") 
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 logger.info("torch") 
 
-from torch.utils.data import DataLoader, SubsetRandomSampler, Subset
+from torch.utils.data import DataLoader, SubsetRandomSampler
 logger.info("Dataset, DataLoader, SubsetRandomSampler") 
 from EfficientSAM.efficient_sam.efficient_sam import build_efficient_sam
 logger.info("efficientsam") 
@@ -36,7 +32,6 @@ logger.info("sklearn")
 from torch.optim.lr_scheduler import CosineAnnealingLR
 logger.info("CosineAnnealingLR") 
 from skimage.measure import label
-from skimage.segmentation import find_boundaries
 logger.info("skimage")
 logger.info("torchvision") 
 
@@ -48,10 +43,10 @@ from tqdm import tqdm
 logger.info("tqdm")
 
 
-from dataset import AugmentedNuInsSegDataset, augment_batch
+from dataset import AugmentedNuInsSegDataset
 from util import EnhancedSegmentationLoss   
 from model import LoRA_EfficientSAM
-from visualize import visualize_predictions, visualize_augmentations
+from visualize import visualize_predictions
 
 
 from EfficientSAM.efficient_sam.efficient_sam import build_efficient_sam
@@ -152,6 +147,7 @@ def validate(model, val_loader, criterion, device):
             # Extract data from the batch and move to device
             images = batch['image'].to(device).float()
             gt_masks = batch['binary_mask'].to(device)
+            gt_instance_mask = batch['instance_mask'].to(device)
             
             # Process prompt points and labels
             prompt_points = batch['prompt_points'].to(device).float()
@@ -214,7 +210,7 @@ def validate(model, val_loader, criterion, device):
                 pq = pq_metric.aggregate().mean().item()
                 panoptic_quality_scores.append(pq)
                 
-                loss = criterion(predicted_mask, gt_masks)
+                loss = criterion(predicted_mask, gt_masks, gt_instance_mask)
                 
                 output_one_hot = predicted_mask_binary.unsqueeze(0)
                 mask_one_hot = gt_masks.unsqueeze(0)
@@ -255,14 +251,11 @@ def train_epoch(model, train_loader, criterion, optimizer, scheduler, device, ap
     batch_count = 0
 
     for i, batch in tqdm(enumerate(train_loader), desc="(train) Processing batches", total=len(train_loader)):
-   
-        # Apply data augmentation if enabled
-        if apply_augmentation:
-            batch = augment_batch(batch, device=device)
             
         # Extract data from the batch and move to device
         images = batch['image'].to(device).float()
         gt_masks = batch['binary_mask'].to(device)
+        gt_instance_mask = batch['instance_mask'].to(device)
         
         # Ensure images are in the right format (channels first, normalized)
         if images.dim() == 3:
@@ -312,7 +305,7 @@ def train_epoch(model, train_loader, criterion, optimizer, scheduler, device, ap
                     align_corners=False
                 ).squeeze(1)
             
-            loss = criterion(predicted_mask, gt_masks)
+            loss = criterion(predicted_mask, gt_masks, gt_instance_mask)
             
             optimizer.zero_grad()
             loss.backward()
@@ -399,18 +392,19 @@ class Config():
         self.num_folds = 5
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.patience = 10
-        self.apply_augmentation = True
+        self.apply_augmentation = False
         self.augmentation_prob = 1.0
         self.visualize_results = True
         self.num_vis_samples = 10
-        self.rank = 16
-        self.alpha = 64
-        self.learning_rate = 1e-4
+        self.rank = 64
+        self.alpha = 256
+        self.learning_rate = 5e-5
         self.max_scheduler_iter = 10
-        self.min_learning_rate = 1e-6
+        self.min_learning_rate = 5e-7
         self.lambda_focal = 1.0
         self.lambda_dice = 1.0
-        self.lambda_boundary = 2
+        self.lambda_boundary = 1.0
+        self.lambda_contrastive = 1.0
         self.loss_alpha = 0.75
         self.loss_gamma = 2.0
         self.early_stopping_min_delta = 0.001
@@ -435,7 +429,7 @@ def main():
         vis_dir = os.path.join(results_dir, "visualizations")
         os.makedirs(vis_dir, exist_ok=True)
     
-    dataset = AugmentedNuInsSegDataset(root_dir=cfg.root_dir, include_augmentations=True)
+    dataset = AugmentedNuInsSegDataset(root_dir=cfg.root_dir, include_augmentations=cfg.apply_augmentation)
     logger.info(f"Dataset loaded with {len(dataset)} samples")
     logger.info(f'Checkpoint directory: {checkpoint_dir}')
 
@@ -487,7 +481,7 @@ def main():
             dataset,
             batch_size=cfg.batch_size,
             sampler=train_sampler,
-            num_workers=4,
+            num_workers=2,
             worker_init_fn=worker_init_fn
         )
         
@@ -499,6 +493,7 @@ def main():
             worker_init_fn=worker_init_fn
         )
         
+        original_sam_model = build_efficient_sam_vitt().to(cfg.device) 
         sam_model = build_efficient_sam_vitt().to(cfg.device)
         
         total_params_sam = sum(p.numel() for p in sam_model.parameters())
@@ -517,7 +512,7 @@ def main():
         logger.info(f"EfficientSAM-Tiny trainable parameters after freezing: {frozen_params_sam:,}")
         
         # Create LoRA model k fold
-        lora_sam = LoRA_EfficientSAM(sam_model, r=cfg.rank, alpha=cfg.alpha).to(cfg.device)
+        lora_sam = LoRA_EfficientSAM(config=cfg, sam_model=sam_model, r=cfg.rank, alpha=cfg.alpha).to(cfg.device)
         
         # get trainable and total parameter counts for the LoRA model
         trainable_params_lora = sum(p.numel() for p in lora_sam.parameters() if p.requires_grad)
@@ -527,7 +522,7 @@ def main():
         
         optimizer = torch.optim.Adam([p for p in lora_sam.parameters() if p.requires_grad], lr=cfg.learning_rate)
         scheduler = CosineAnnealingLR(optimizer, T_max=cfg.max_scheduler_iter, eta_min=cfg.min_learning_rate)
-        criterion = EnhancedSegmentationLoss(lambda_focal=cfg.lambda_focal, lambda_dice=cfg.lambda_dice, lambda_boundary=cfg.lambda_boundary, alpha=cfg.loss_alpha, gamma=cfg.loss_gamma)
+        criterion = EnhancedSegmentationLoss(cfg)
         
         early_stopping = EarlyStopping(patience=cfg.patience, min_delta=cfg.early_stopping_min_delta, verbose=True)
         
@@ -556,7 +551,6 @@ def main():
             results['folds'][str(fold)]['jaccard_scores'].append(jaccard_score)
             results['folds'][str(fold)]['panoptic_quality_scores'].append(panoptic_quality)
             
-            # Collect metrics across folds for averaging
             fold_train_losses[epoch].append(train_loss)
             fold_val_losses[epoch].append(val_loss)
             fold_dice_scores[epoch].append(dice_score)
@@ -583,7 +577,6 @@ def main():
                         cfg.device, 
                         fold_vis_dir, 
                         num_samples=min(5, cfg.num_vis_samples), 
-                        fold_idx=fold
                     )
             
             if early_stopping.early_stop:
@@ -596,7 +589,7 @@ def main():
         results['best_panoptic_quality_scores'].append(results['folds'][str(fold)]['best_panoptic_quality'])
         
         if cfg.visualize_results:
-            best_model = LoRA_EfficientSAM(sam_model, r=cfg.rank, alpha=cfg.alpha).to(cfg.device)
+            best_model = LoRA_EfficientSAM(config=cfg, sam_model=original_sam_model, r=cfg.rank, alpha=cfg.alpha).to(cfg.device)
             best_model.load_lora_parameters(fold_checkpoint_path)
             best_model.eval()
             
@@ -610,7 +603,6 @@ def main():
                 cfg.device, 
                 final_vis_dir, 
                 num_samples=cfg.num_vis_samples, 
-                fold_idx=fold
             )
             
             del best_model
@@ -641,11 +633,6 @@ def main():
         json.dump(results, f, indent=4)
     
     plot_metrics(results, results_dir)
-    
-    if cfg.visualize_results:
-        augmentation_vis_dir = os.path.join(vis_dir, "augmentation_examples")
-        os.makedirs(augmentation_vis_dir, exist_ok=True)
-        visualize_augmentations(dataset, augmentation_vis_dir, num_samples=5)
     
     for fold, fold_results in results['folds'].items():
         logger.info(f"{'='*20} Fold {fold} Results {'='*20}")
